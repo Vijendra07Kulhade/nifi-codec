@@ -30,5 +30,5 @@ hs_err_pid*
 .idea/sbt.xml
 .idea/sonarlint/
 .idea/vcs.xml
-nifi-codec-bundle.iml
+*.iml
 target/
