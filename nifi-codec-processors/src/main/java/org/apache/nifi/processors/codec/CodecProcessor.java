@@ -16,6 +16,9 @@
  */
 package org.apache.nifi.processors.codec;
 
+import com.google.protobuf.Message;
+import com.google.protobuf.util.JsonFormat;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.nifi.annotation.behavior.ReadsAttribute;
 import org.apache.nifi.annotation.behavior.ReadsAttributes;
 import org.apache.nifi.annotation.behavior.WritesAttribute;
@@ -30,8 +33,14 @@ import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.logging.LogLevel;
 import org.apache.nifi.processor.*;
 import org.apache.nifi.processor.exception.ProcessException;
+import org.apache.nifi.processor.io.InputStreamCallback;
 import org.apache.nifi.processor.util.StandardValidators;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintWriter;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.*;
 
 @Tags({"codec"})
@@ -118,9 +127,35 @@ public class CodecProcessor extends AbstractProcessor {
         getLogger().log(LogLevel.INFO,String.format("found customClassName %s",customClassName));
         try {
             Class<?> cls = Thread.currentThread().getContextClassLoader().loadClass(customClassName);
+            Message msg =(Message) cls.getDeclaredMethod("getDefaultInstance").invoke(null, (Object[]) null);
             getLogger().log(LogLevel.INFO,String.format("Loaded customClassName %s",cls.getCanonicalName()));
-            session.transfer(flowFile, ORIGINAL);
-        }catch (ClassNotFoundException c){
+            FlowFile jsonFlowFile = session.create(flowFile);
+            try (PrintWriter fw = new PrintWriter(session.write(jsonFlowFile))) {
+                session.read(flowFile, new InputStreamCallback() {
+                    @Override
+                    public void process(InputStream input) throws IOException {
+                        long startTime = System.currentTimeMillis();
+                        Message m;
+                        int recordCount = 0;
+                        while ((m = msg.getParserForType().parseFrom(input)) != null) {
+                            String jsonString = JsonFormat.printer().preservingProtoFieldNames().omittingInsignificantWhitespace().print(m);
+                            if (StringUtils.isNotBlank(jsonString)) {
+                                jsonString = jsonString.replace("\n", "");
+                                fw.println(jsonString);
+                            }
+                            recordCount++;
+                        }
+                        input.close();
+                        getLogger().info(String.format("Time take: %d ms to write for in file. Records: %d ", (System.currentTimeMillis() - startTime), recordCount));
+                    }
+                });
+
+            }
+            String filename = flowFile.getAttribute("filename");
+            session.putAttribute(jsonFlowFile, "filename", filename.replaceAll("\\..*", ".json"));
+            session.transfer(jsonFlowFile, SUCCESS);
+            session.transfer(flowFile,ORIGINAL);
+        }catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException | InvocationTargetException c){
             getLogger().error(String.format("Error while loading class %s(%s). Is it valid?", customClassName,classpath), c);
             session.transfer(flowFile, ERROR);
         }
