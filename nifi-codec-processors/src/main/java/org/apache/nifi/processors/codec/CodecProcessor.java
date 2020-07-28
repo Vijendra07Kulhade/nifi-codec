@@ -104,7 +104,6 @@ public class CodecProcessor extends AbstractProcessor {
 
     @OnScheduled
     public void onScheduled(final ProcessContext context) {
-
     }
 
     @Override

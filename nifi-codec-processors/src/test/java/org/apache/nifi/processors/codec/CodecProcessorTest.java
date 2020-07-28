@@ -26,6 +26,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 
 public class CodecProcessorTest {
@@ -37,13 +38,14 @@ public class CodecProcessorTest {
         testRunner = TestRunners.newTestRunner(CodecProcessor.class);
     }
 
-    @Test(expected = ClassNotFoundException.class)
+    @Test
     public void testProcessor() {
         testRunner.setProperty(CodecProcessor.ADDITIONAL_CLASSPATH_RESOURCES," src/test/resources/SignGen.jar");
         testRunner.setProperty(CodecProcessor.CUSTOM_CLASS,"SimplePojo");
         testRunner.enqueue("Hello".getBytes(), Collections.singletonMap("filename", "test.txt"));
         testRunner.run();
-        List<MockFlowFile> flowFilesList = testRunner.getFlowFilesForRelationship(CodecProcessor.ORIGINAL);
+        List<MockFlowFile> flowFilesList = testRunner.getFlowFilesForRelationship(CodecProcessor.ERROR);
+        assertEquals(1,flowFilesList.size());
 
     }
 
